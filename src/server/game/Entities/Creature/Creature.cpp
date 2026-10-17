@@ -17,6 +17,8 @@
 
 #include "Creature.h"
 #include "LabSwitches.h"
+#include "Config.h"
+#include <atomic>
 #include "BattlegroundMgr.h"
 #include "CellImpl.h"
 #include "Common.h"
@@ -4013,10 +4015,25 @@ bool Creature::IsUpdateNeeded()
     if (ToTempSummon())
         return true;
 
-    if (GetMotionMaster()->HasMovementGeneratorType(WAYPOINT_MOTION_TYPE))
+    if (HasUnitState(UNIT_STATE_EVADE))
         return true;
 
-    if (HasUnitState(UNIT_STATE_EVADE))
+    // Lab: Lab.SleepUnseenPatrols = 1 lets waypoint walkers and formation followers sleep like every
+    // other creature when no player can see them and their cell is not next to a player. They wake
+    // again through the normal visibility path when a player comes near. Read every 10 s so a
+    // `reload config` switches it on the running server.
+    static std::atomic<bool> sleepUnseenPatrols{false};
+    static std::atomic<uint32> lastRead{0};
+    uint32 const now = getMSTime();
+    if (getMSTimeDiff(lastRead.load(std::memory_order_relaxed), now) > 10000)
+    {
+        lastRead.store(now, std::memory_order_relaxed);
+        sleepUnseenPatrols.store(sConfigMgr->GetOption<bool>("Lab.SleepUnseenPatrols", false, false), std::memory_order_relaxed);
+    }
+    if (sleepUnseenPatrols.load(std::memory_order_relaxed))
+        return false;
+
+    if (GetMotionMaster()->HasMovementGeneratorType(WAYPOINT_MOTION_TYPE))
         return true;
 
     if (m_formation && m_formation->GetLeader() != this)
