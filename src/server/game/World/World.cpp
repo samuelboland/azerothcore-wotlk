@@ -20,6 +20,7 @@
 */
 
 #include "World.h"
+#include "LabSwitches.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "AddonMgr.h"
@@ -295,6 +296,12 @@ void World::LoadConfigSettings(bool reload)
     VMAP::VMapFactory::createOrGetVMapMgr()->setEnableLineOfSightCalc(enableLOS);
     VMAP::VMapFactory::createOrGetVMapMgr()->setEnableHeightCalc(enableHeight);
     LOG_INFO("server.loading", "WORLD: VMap support included. LineOfSight:{}, getHeight:{}, indoorCheck:{} PetLOS:{}", enableLOS, enableHeight, enableIndoor, enablePetLOS);
+
+    LabSwitches::Refresh();
+    LOG_INFO("server.loading", "LAB switches: SplineFlag {} AuraStateCache {} AuraShortcut {} Prefetch {} ThreatCheck {} ScriptIdSkip {} OwnerLookup {}",
+        LabSwitches::On(LabSwitches::SplineFlag), LabSwitches::On(LabSwitches::AuraStateCache), LabSwitches::On(LabSwitches::AuraShortcut),
+        LabSwitches::On(LabSwitches::Prefetch), LabSwitches::On(LabSwitches::ThreatCheck), LabSwitches::On(LabSwitches::ScriptIdSkip),
+        LabSwitches::On(LabSwitches::OwnerLookup));
 
     // call ScriptMgr if we're reloading the configuration
     sScriptMgr->OnAfterConfigLoad(reload);
