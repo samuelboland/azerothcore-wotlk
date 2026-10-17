@@ -45,6 +45,9 @@
 #include "Vehicle.h"
 #include "VMapMgr2.h"
 #include "Weather.h"
+#include "CreatureGroups.h"
+#include "MotionMaster.h"
+#include <mutex>
 #include "WeatherMgr.h"
 
 #define MAP_INVALID_ZONE        0xFFFFFFFF
@@ -538,8 +541,36 @@ void Map::Update(const uint32 t_diff, const uint32 s_diff, bool  /*thread*/)
         METRIC_TAG("map_instanceid", std::to_string(GetInstanceId())));
 }
 
+// Lab instrumentation: why each creature on the update list is still awake at the 30 s recheck.
+namespace
+{
+    enum LabAwake { LAB_NEAR, LAB_COMBAT, LAB_SUMMON, LAB_ACTIVE, LAB_PATROL, LAB_FORMATION, LAB_OTHER, LAB_MAX };
+    struct LabAwakeStats { uint32 objects = 0; uint32 creatures = 0; uint32 reasons[LAB_MAX] = {}; };
+    std::mutex labStatsLock;
+    std::map<std::pair<uint32, uint32>, LabAwakeStats> labStats;
+    std::map<std::pair<uint32, uint32>, uint32> labCycles;   // full object updates since the last log
+    uint32 labLastLog = 0;
+
+    LabAwake LabClassify(Creature* c)
+    {
+        if (c->isActiveObject()) return LAB_ACTIVE;
+        if (!c->GetObjectVisibilityContainer().GetVisiblePlayersMap().empty() || c->GetMap()->isCellMarked(Acore::ComputeCellCoord(c->GetPositionX(), c->GetPositionY()).GetId()))
+            return LAB_NEAR;
+        if (c->IsInCombat() || c->HasUnitState(UNIT_STATE_EVADE)) return LAB_COMBAT;
+        if (c->ToTempSummon()) return LAB_SUMMON;
+        if (c->GetMotionMaster()->HasMovementGeneratorType(WAYPOINT_MOTION_TYPE)) return LAB_PATROL;
+        if (c->GetFormation() && c->GetFormation()->GetLeader() != c) return LAB_FORMATION;
+        return LAB_OTHER;
+    }
+}
+
 void Map::UpdateNonPlayerObjects(uint32 const diff)
 {
+    {
+        std::lock_guard<std::mutex> guard(labStatsLock);
+        ++labCycles[{GetId(), GetInstanceId()}];
+    }
+
     for (WorldObject* obj : _pendingAddUpdatableObjectList)
         _AddObjectToUpdateList(obj);
     _pendingAddUpdatableObjectList.clear();
@@ -567,6 +598,33 @@ void Map::UpdateNonPlayerObjects(uint32 const diff)
                 ++i;
         }
         _updatableObjectListRecheckTimer.Reset();
+
+        LabAwakeStats st;
+        st.objects = uint32(_updatableObjectList.size());
+        for (WorldObject* obj : _updatableObjectList)
+            if (Creature* c = obj->ToCreature(); c && c->IsInWorld())
+            {
+                ++st.creatures;
+                ++st.reasons[LabClassify(c)];
+            }
+        std::lock_guard<std::mutex> guard(labStatsLock);
+        labStats[{GetId(), GetInstanceId()}] = st;
+        uint32 const now = getMSTime();
+        if (getMSTimeDiff(labLastLog, now) > 25000)
+        {
+            float const secs = getMSTimeDiff(labLastLog, now) / 1000.0f;
+            labLastLog = now;
+            for (auto& [key, n] : labCycles)
+            {
+                LOG_INFO("server.worldserver", "LAB cycles map {} inst {}: {:.1f} full object updates per second", key.first, key.second, n / secs);
+                n = 0;
+            }
+            for (auto const& [key, v] : labStats)
+                if (v.objects)
+                    LOG_INFO("server.worldserver", "LAB awake map {} inst {}: objects {} creatures {} near {} combat {} summon {} active {} patrol {} formation {} other {}",
+                        key.first, key.second, v.objects, v.creatures, v.reasons[LAB_NEAR], v.reasons[LAB_COMBAT], v.reasons[LAB_SUMMON],
+                        v.reasons[LAB_ACTIVE], v.reasons[LAB_PATROL], v.reasons[LAB_FORMATION], v.reasons[LAB_OTHER]);
+        }
     }
     else
     {
