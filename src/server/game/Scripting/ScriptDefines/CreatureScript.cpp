@@ -16,6 +16,7 @@
  */
 
 #include "CreatureScript.h"
+#include "LabSwitches.h"
 #include "AllCreatureScript.h"
 #include "ScriptMgr.h"
 #include "ScriptMgrMacros.h"
@@ -189,10 +190,10 @@ void ScriptMgr::OnCreatureUpdate(Creature* creature, uint32 diff)
         script->OnAllCreatureUpdate(creature, diff);
     });
 
-    if (auto tempScript = ScriptRegistry<CreatureScript>::GetScriptById(creature->GetScriptId()))
-    {
-        tempScript->OnUpdate(creature, diff);
-    }
+    uint32 const scriptId = creature->GetScriptId();
+    if (scriptId || !LabSwitches::On(LabSwitches::ScriptIdSkip))
+        if (auto tempScript = ScriptRegistry<CreatureScript>::GetScriptById(scriptId))
+            tempScript->OnUpdate(creature, diff);
 }
 
 CreatureScript::CreatureScript(char const* name)
