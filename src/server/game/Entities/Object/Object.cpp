@@ -300,7 +300,7 @@ void Object::DestroyForPlayer(Player* target, bool onDeath) const
     return m_int32Values[index];
 }
 
-[[nodiscard]] uint32 Object::GetUInt32Value(uint16 index) const
+[[nodiscard]] uint32 Object::GetUInt32ValueChecked(uint16 index) const
 {
     ASSERT(index < m_valuesCount || PrintIndexError(index, false));
     return m_uint32Values[index];
@@ -332,7 +332,7 @@ void Object::DestroyForPlayer(Player* target, bool onDeath) const
     return *(((uint16*) &m_uint32Values[index]) + offset);
 }
 
-[[nodiscard]] ObjectGuid Object::GetGuidValue(uint16 index) const
+[[nodiscard]] ObjectGuid Object::GetGuidValueChecked(uint16 index) const
 {
     ASSERT(index + 1 < m_valuesCount || PrintIndexError(index, false));
     return *((ObjectGuid*) &(m_uint32Values[index]));
@@ -877,7 +877,7 @@ void Object::ToggleFlag(uint16 index, uint32 flag)
     }
 }
 
-[[nodiscard]] bool Object::HasFlag(uint16 index, uint32 flag) const
+[[nodiscard]] bool Object::HasFlagChecked(uint16 index, uint32 flag) const
 {
     if (index >= m_valuesCount && !PrintIndexError(index, false))
     {

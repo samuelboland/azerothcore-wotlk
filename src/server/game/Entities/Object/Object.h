@@ -145,12 +145,24 @@ public:
     virtual void DestroyForPlayer(Player* target, bool onDeath = false) const;
 
     [[nodiscard]] int32 GetInt32Value(uint16 index) const;
-    [[nodiscard]] uint32 GetUInt32Value(uint16 index) const;
+    [[nodiscard]] uint32 GetUInt32Value(uint16 index) const
+    {
+        if (index < m_valuesCount) [[likely]]
+            return m_uint32Values[index];
+        return GetUInt32ValueChecked(index);
+    }
+    [[nodiscard]] uint32 GetUInt32ValueChecked(uint16 index) const;
     [[nodiscard]] uint64 GetUInt64Value(uint16 index) const;
     [[nodiscard]] float GetFloatValue(uint16 index) const;
     [[nodiscard]] uint8 GetByteValue(uint16 index, uint8 offset) const;
     [[nodiscard]] uint16 GetUInt16Value(uint16 index, uint8 offset) const;
-    [[nodiscard]] ObjectGuid GetGuidValue(uint16 index) const;
+    [[nodiscard]] ObjectGuid GetGuidValue(uint16 index) const
+    {
+        if (index + 1 < m_valuesCount) [[likely]]
+            return *((ObjectGuid*) &(m_uint32Values[index]));
+        return GetGuidValueChecked(index);
+    }
+    [[nodiscard]] ObjectGuid GetGuidValueChecked(uint16 index) const;
 
     void SetInt32Value(uint16 index, int32 value);
     void SetUInt32Value(uint16 index, uint32 value);
@@ -176,7 +188,13 @@ public:
     void SetFlag(uint16 index, uint32 newFlag);
     void RemoveFlag(uint16 index, uint32 oldFlag);
     void ToggleFlag(uint16 index, uint32 flag);
-    [[nodiscard]] bool HasFlag(uint16 index, uint32 flag) const;
+    [[nodiscard]] bool HasFlag(uint16 index, uint32 flag) const
+    {
+        if (index < m_valuesCount) [[likely]]
+            return (m_uint32Values[index] & flag) != 0;
+        return HasFlagChecked(index, flag);
+    }
+    [[nodiscard]] bool HasFlagChecked(uint16 index, uint32 flag) const;
     void ApplyModFlag(uint16 index, uint32 flag, bool apply);
 
     void SetByteFlag(uint16 index, uint8 offset, uint8 newFlag);
