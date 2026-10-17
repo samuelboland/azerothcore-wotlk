@@ -24,6 +24,7 @@
  */
 
 #include "ThreatManager.h"
+#include "LabSwitches.h"
 #include "CombatManager.h"
 #include "Containers.h"
 #include "Creature.h"
@@ -234,7 +235,7 @@ void ThreatManager::Initialize()
 
 void ThreatManager::Update(uint32 tdiff)
 {
-    if (!CanHaveThreatList() || IsThreatListEmpty(true))
+    if (!CanHaveThreatList() || (LabSwitches::On(LabSwitches::ThreatCheck) ? _myThreatListEntries.empty() : IsThreatListEmpty(true)))
         return;
     if (_updateTimer <= tdiff)
     {
