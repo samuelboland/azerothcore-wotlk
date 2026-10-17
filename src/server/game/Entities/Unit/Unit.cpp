@@ -636,9 +636,29 @@ void Unit::Update(uint32 p_time)
     // update abilities available only for fraction of time
     UpdateReactives(p_time);
 
-    ModifyAuraState(AURA_STATE_HEALTHLESS_20_PERCENT, IsAlive() ? HealthBelowPct(20) : false);
-    ModifyAuraState(AURA_STATE_HEALTHLESS_35_PERCENT, IsAlive() ? HealthBelowPct(35) : false);
-    ModifyAuraState(AURA_STATE_HEALTH_ABOVE_75_PERCENT, IsAlive() ? HealthAbovePct(75) : false);
+    // These three states depend only on health, max health and death state. If those inputs and the three
+    // bits themselves are unchanged since the last full update (which saw no input change while it ran),
+    // the three calls below would all be no-ops, so they are skipped. Any other writer of the bits (GM or
+    // script field edits, InitStatsForLevel) shows up as a bits change or resets the cache.
+    uint32 constexpr auraStateMask = (1u << (AURA_STATE_HEALTHLESS_20_PERCENT - 1)) |
+        (1u << (AURA_STATE_HEALTHLESS_35_PERCENT - 1)) | (1u << (AURA_STATE_HEALTH_ABOVE_75_PERCENT - 1));
+    uint32 const auraStateHealth = GetHealth();
+    uint32 const auraStateMaxHealth = GetMaxHealth();
+    DeathState const auraStateDeathState = m_deathState;
+    if (!m_auraStateValid || auraStateHealth != m_auraStateHealth || auraStateMaxHealth != m_auraStateMaxHealth ||
+        auraStateDeathState != m_auraStateDeathState || (GetUInt32Value(UNIT_FIELD_AURASTATE) & auraStateMask) != m_auraStateBits ||
+        !LabSwitches::On(LabSwitches::AuraStateCache))
+    {
+        ModifyAuraState(AURA_STATE_HEALTHLESS_20_PERCENT, IsAlive() ? HealthBelowPct(20) : false);
+        ModifyAuraState(AURA_STATE_HEALTHLESS_35_PERCENT, IsAlive() ? HealthBelowPct(35) : false);
+        ModifyAuraState(AURA_STATE_HEALTH_ABOVE_75_PERCENT, IsAlive() ? HealthAbovePct(75) : false);
+        m_auraStateHealth = auraStateHealth;
+        m_auraStateMaxHealth = auraStateMaxHealth;
+        m_auraStateDeathState = auraStateDeathState;
+        m_auraStateBits = GetUInt32Value(UNIT_FIELD_AURASTATE) & auraStateMask;
+        // Aura effects triggered by the calls above may change health; then recompute next tick, as before.
+        m_auraStateValid = GetHealth() == auraStateHealth && GetMaxHealth() == auraStateMaxHealth && m_deathState == auraStateDeathState;
+    }
 
     UpdateSplineMovement(p_time);
     GetMotionMaster()->UpdateMotion(p_time);

@@ -2628,6 +2628,7 @@ void Player::InitStatsForLevel(bool reapplyMods)
 
     // reset before any aura state sources (health set/aura apply)
     SetUInt32Value(UNIT_FIELD_AURASTATE, 0);
+    ResetHealthAuraStateCache();
 
     UpdateSkillsForLevel();
 

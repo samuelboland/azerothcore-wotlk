@@ -1792,6 +1792,8 @@ public:
     // DeathState
     DeathState getDeathState() { return m_deathState; };
     void SetSplineMaybeActive() { m_splineMaybeActive = true; }
+    // Forces the next Unit::Update to recompute the health aura states (call after clearing UNIT_FIELD_AURASTATE).
+    void ResetHealthAuraStateCache() { m_auraStateValid = false; }
     virtual void setDeathState(DeathState s, bool despawn = false);           // overwrited in Creature/Player/Pet
 
     [[nodiscard]] bool IsAlive() const { return (m_deathState == DeathState::Alive); };
@@ -2118,6 +2120,13 @@ public:
     // One-sided mirror of !movespline->Finalized(): set wherever a spline is initialized (MoveSplineInit),
     // cleared once UpdateSplineMovement sees the spline finalized. False means finalized, exactly.
     bool m_splineMaybeActive = false;
+    // Health aura-state cache: inputs and resulting bits of the last full update. While all of them are
+    // unchanged, the three ModifyAuraState calls in Unit::Update would be no-ops.
+    bool m_auraStateValid = false;
+    uint32 m_auraStateHealth = 0;
+    uint32 m_auraStateMaxHealth = 0;
+    DeathState m_auraStateDeathState = DeathState::Alive;
+    uint32 m_auraStateBits = 0;
     bool bRequestForcedVisibilityUpdate;
 
     // Movement info
