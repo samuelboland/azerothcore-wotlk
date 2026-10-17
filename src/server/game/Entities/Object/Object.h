@@ -504,6 +504,8 @@ public:
     ~WorldObject() override;
 
     virtual void Update(uint32 diff);
+    // Cache hints for Map::UpdateNonPlayerObjects. stage 0: own fields, stage 1: separately allocated parts.
+    virtual void PrefetchForUpdate(int /*stage*/) const { }
 
     void _Create(ObjectGuid::LowType guidlow, HighGuid guidhigh, uint32 phaseMask);
 

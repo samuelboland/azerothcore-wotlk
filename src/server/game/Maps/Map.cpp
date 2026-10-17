@@ -16,6 +16,7 @@
  */
 
 #include "Map.h"
+#include "LabSwitches.h"
 #include "Battleground.h"
 #include "CellImpl.h"
 #include "Chat.h"
@@ -569,8 +570,22 @@ void Map::UpdateNonPlayerObjects(uint32 const diff)
     }
     else
     {
+        bool const prefetch = LabSwitches::On(LabSwitches::Prefetch);
         for (uint32 i = 0; i < _updatableObjectList.size(); ++i)
         {
+            // Cache hints a few objects ahead: the object's first line, then its own hot fields, then the parts
+            // allocated separately. Hints only; the objects are all on this map, owned by this thread.
+            if (prefetch)
+            {
+                uint32 const n = _updatableObjectList.size();
+                if (i + 8 < n)
+                    __builtin_prefetch(_updatableObjectList[i + 8]);
+                if (i + 4 < n)
+                    _updatableObjectList[i + 4]->PrefetchForUpdate(0);
+                if (i + 2 < n)
+                    _updatableObjectList[i + 2]->PrefetchForUpdate(1);
+            }
+
             WorldObject* obj = _updatableObjectList[i];
             if (!obj->IsInWorld())
                 continue;

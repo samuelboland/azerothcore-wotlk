@@ -1792,6 +1792,25 @@ public:
     // DeathState
     DeathState getDeathState() { return m_deathState; };
     void SetSplineMaybeActive() { m_splineMaybeActive = true; }
+    void PrefetchForUpdate(int stage) const override
+    {
+        if (stage == 0)
+        {
+            __builtin_prefetch(&m_deathState);
+            __builtin_prefetch(&m_splineMaybeActive);
+            __builtin_prefetch(&m_ownedAuras);
+            __builtin_prefetch(&i_motionMaster);
+            __builtin_prefetch(&i_AI);
+            __builtin_prefetch(&m_uint32Values);
+            __builtin_prefetch(&m_Events);
+        }
+        else
+        {
+            __builtin_prefetch(i_motionMaster);
+            __builtin_prefetch(i_AI);
+            __builtin_prefetch(m_uint32Values);
+        }
+    }
     // Forces the next Unit::Update to recompute the health aura states (call after clearing UNIT_FIELD_AURASTATE).
     void ResetHealthAuraStateCache() { m_auraStateValid = false; }
     virtual void setDeathState(DeathState s, bool despawn = false);           // overwrited in Creature/Player/Pet
