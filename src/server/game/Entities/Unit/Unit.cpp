@@ -16,6 +16,7 @@
  */
 
 #include "Unit.h"
+#include "LabSwitches.h"
 #include "AbstractFollower.h"
 #include "AreaDefines.h"
 #include "ArenaSpectator.h"
@@ -701,8 +702,19 @@ private:
 
 void Unit::UpdateSplineMovement(uint32 t_diff)
 {
-    if (movespline->Finalized())
-        return;
+    if (LabSwitches::On(LabSwitches::SplineFlag))
+    {
+        if (!m_splineMaybeActive)
+            return;
+
+        if (movespline->Finalized())
+        {
+            m_splineMaybeActive = false;
+            return;
+        }
+    }
+    else if (movespline->Finalized())
+        return;  // original path; the flag is left set, which stays correct (it is only ever conservative)
 
     // xinef: process movementinform
     // this code cant be placed inside EscortMovementGenerator, because we cant delete active MoveGen while it is updated

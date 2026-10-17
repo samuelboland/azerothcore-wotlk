@@ -1791,6 +1791,7 @@ public:
 
     // DeathState
     DeathState getDeathState() { return m_deathState; };
+    void SetSplineMaybeActive() { m_splineMaybeActive = true; }
     virtual void setDeathState(DeathState s, bool despawn = false);           // overwrited in Creature/Player/Pet
 
     [[nodiscard]] bool IsAlive() const { return (m_deathState == DeathState::Alive); };
@@ -2114,6 +2115,9 @@ public:
     uint32 m_last_notify_mstime;
     uint16 m_delayed_unit_relocation_timer;
     uint16 m_delayed_unit_ai_notify_timer;
+    // One-sided mirror of !movespline->Finalized(): set wherever a spline is initialized (MoveSplineInit),
+    // cleared once UpdateSplineMovement sees the spline finalized. False means finalized, exactly.
+    bool m_splineMaybeActive = false;
     bool bRequestForcedVisibilityUpdate;
 
     // Movement info

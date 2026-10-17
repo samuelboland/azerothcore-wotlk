@@ -110,6 +110,7 @@ namespace Movement
 
         unit->m_movementInfo.SetMovementFlags(moveFlags);
         move_spline.Initialize(args);
+        unit->SetSplineMaybeActive();
 
         WorldPacket data(SMSG_MONSTER_MOVE, 64);
         data << unit->GetPackGUID();
@@ -156,6 +157,7 @@ namespace Movement
         unit->m_movementInfo.RemoveMovementFlag(MOVEMENTFLAG_FORWARD | MOVEMENTFLAG_BACKWARD | MOVEMENTFLAG_SPLINE_ENABLED);
         move_spline.onTransport = transport;
         move_spline.Initialize(args);
+        unit->SetSplineMaybeActive();
 
         WorldPacket data(SMSG_MONSTER_MOVE, 64);
         data << unit->GetPackGUID();
