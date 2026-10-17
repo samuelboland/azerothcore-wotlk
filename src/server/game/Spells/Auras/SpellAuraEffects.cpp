@@ -596,6 +596,13 @@ void AuraEffect::CalculatePeriodicData()
         SetCritChance(CalcPeriodicCritChance(GetCaster(), (GetBase()->GetType() == UNIT_AURA_TYPE ? GetBase()->GetUnitOwner() : nullptr)));
 }
 
+void AuraEffect::SetPeriodic(bool isPeriodic)
+{
+    m_isPeriodic = isPeriodic;
+    if (isPeriodic)
+        GetBase()->MarkMaybePeriodic();
+}
+
 void AuraEffect::CalculatePeriodic(Unit* caster, bool create, bool load)
 {
     m_amplitude = m_spellInfo->Effects[m_effIndex].Amplitude;
@@ -628,6 +635,9 @@ void AuraEffect::CalculatePeriodic(Unit* caster, bool create, bool load)
     }
 
     GetBase()->CallScriptEffectCalcPeriodicHandlers(this, m_isPeriodic, m_amplitude);
+
+    if (m_isPeriodic)
+        GetBase()->MarkMaybePeriodic();
 
     if (!m_isPeriodic)
         return;

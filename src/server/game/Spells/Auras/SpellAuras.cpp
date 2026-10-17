@@ -16,6 +16,7 @@
  */
 
 #include "ArenaSpectator.h"
+#include "LabSwitches.h"
 #include "CellImpl.h"
 #include "Common.h"
 #include "GameTime.h"
@@ -793,6 +794,23 @@ void Aura::UpdateOwner(uint32 diff, WorldObject* owner)
     if (owner != m_owner)
     {
         ABORT();
+    }
+
+    // Shortcut with the same effect as the full pass below, for an aura that has never had a periodic effect
+    // (AuraEffect::Update does nothing then), whose target map is not due, and that pays no per-second cost.
+    // What remains is the duration countdown from Aura::Update. Caster lookup, spell-mod owner and the effect
+    // loop have no other effect in that case.
+    if (!m_maybePeriodic && m_updateTargetMapInterval > int32(diff) && (m_duration <= 0 || !m_timeCla) && LabSwitches::On(LabSwitches::AuraShortcut))
+    {
+        if (m_duration > 0)
+        {
+            m_duration -= diff;
+            if (m_duration < 0)
+                m_duration = 0;
+        }
+        m_updateTargetMapInterval -= diff;
+        _DeleteRemovedApplications();
+        return;
     }
 
     Unit* caster = GetCaster();

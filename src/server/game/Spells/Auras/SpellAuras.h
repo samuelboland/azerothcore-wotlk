@@ -157,6 +157,7 @@ public:
     bool HasMoreThanOneEffectForType(AuraType auraType) const;
     bool IsArea() const;
     bool IsPassive() const;
+    void MarkMaybePeriodic() { m_maybePeriodic = true; }  // set by AuraEffect when an effect becomes periodic
     bool IsDeathPersistent() const;
     bool IsRemovedOnShapeLost(Unit* target) const;
     bool CanBeSaved() const;
@@ -266,6 +267,7 @@ protected:
     int32 m_duration;                                   // Current time
     int32 m_timeCla;                                    // Timer for power per sec calcultion
     int32 m_updateTargetMapInterval;                    // Timer for UpdateTargetMapOfEffect
+    bool m_maybePeriodic = false;                       // set once any effect has been periodic; never cleared
 
     uint8 const m_casterLevel;                          // Aura level (store caster level for correct show level dep amount)
     uint8 m_procCharges;                                // Aura charges (0 for infinite)
