@@ -20,8 +20,8 @@
 
 #include "ScriptMgr.h"
 
-template<typename ScriptName>
-inline Optional<bool> IsValidBoolScript(std::function<bool(ScriptName*)> executeHook)
+template<typename ScriptName, typename Hook>
+inline Optional<bool> IsValidBoolScript(Hook&& executeHook)
 {
     if (ScriptRegistry<ScriptName>::ScriptPointerList.empty())
         return {};
@@ -35,8 +35,8 @@ inline Optional<bool> IsValidBoolScript(std::function<bool(ScriptName*)> execute
     return false;
 }
 
-template<typename ScriptName, class T>
-inline T* GetReturnAIScript(std::function<T*(ScriptName*)> executeHook)
+template<typename ScriptName, class T, typename Hook>
+inline T* GetReturnAIScript(Hook&& executeHook)
 {
     if (ScriptRegistry<ScriptName>::ScriptPointerList.empty())
         return nullptr;
@@ -52,8 +52,8 @@ inline T* GetReturnAIScript(std::function<T*(ScriptName*)> executeHook)
     return nullptr;
 }
 
-template<typename ScriptName>
-inline void ExecuteScript(std::function<void(ScriptName*)> executeHook)
+template<typename ScriptName, typename Hook>
+inline void ExecuteScript(Hook&& executeHook)
 {
     if (ScriptRegistry<ScriptName>::ScriptPointerList.empty())
         return;
