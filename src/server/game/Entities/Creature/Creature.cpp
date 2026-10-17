@@ -16,6 +16,7 @@
  */
 
 #include "Creature.h"
+#include "LabSwitches.h"
 #include "BattlegroundMgr.h"
 #include "CellImpl.h"
 #include "Common.h"
@@ -835,10 +836,16 @@ void Creature::Update(uint32 diff)
                     m_boundaryCheckTime -= diff;
             }
 
-            Unit* owner = GetCharmerOrOwner();
-            if (IsCharmed() && !IsWithinDistInMap(owner, GetMap()->GetVisibilityRange(), true, false, false))
+            if (LabSwitches::On(LabSwitches::OwnerLookup))
             {
-                RemoveCharmAuras();
+                if (IsCharmed() && !IsWithinDistInMap(GetCharmerOrOwner(), GetMap()->GetVisibilityRange(), true, false, false))
+                    RemoveCharmAuras();
+            }
+            else
+            {
+                Unit* owner = GetCharmerOrOwner();
+                if (IsCharmed() && !IsWithinDistInMap(owner, GetMap()->GetVisibilityRange(), true, false, false))
+                    RemoveCharmAuras();
             }
 
             if (Unit* victim = GetVictim())
