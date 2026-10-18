@@ -16,6 +16,9 @@
  */
 
 #include "AccountMgr.h"
+#include "GameObjectAI.h"
+#include "LabSwitches.h"
+#include <typeinfo>
 #include "BattlegroundAV.h"
 #include "CellImpl.h"
 #include "CreatureAISelector.h"
@@ -107,6 +110,9 @@ bool GameObject::AIM_Initialize()
 
     if (!m_AI)
         return false;
+
+    // Exact dynamic type: only these two have the empty UpdateAI; any other type keeps the call.
+    m_aiUpdateIsEmpty = typeid(*m_AI) == typeid(GameObjectAI) || typeid(*m_AI) == typeid(NullGameObjectAI);
 
     m_AI->InitializeAI();
     return true;
@@ -440,7 +446,10 @@ void GameObject::Update(uint32 diff)
     WorldObject::Update(diff);
 
     if (AI())
-        AI()->UpdateAI(diff);
+    {
+        if (!m_aiUpdateIsEmpty || !LabSwitches::On(LabSwitches::GoAiSkip))
+            AI()->UpdateAI(diff);
+    }
     else if (!AIM_Initialize())
         LOG_ERROR("entities.gameobject", "Could not initialize GameObjectAI");
 

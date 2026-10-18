@@ -428,6 +428,7 @@ private:
     bool IsWithinSightRange(Position const& pos, float dist) const override;
 
     GameObjectAI* m_AI;
+    bool m_aiUpdateIsEmpty = false;   // set in AIM_Initialize from the AI's exact type
 
     bool m_saveStateOnDb = false;
 };
