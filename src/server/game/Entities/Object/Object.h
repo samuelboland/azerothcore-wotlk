@@ -105,8 +105,6 @@ struct PositionFullTerrainStatus;
 
 typedef std::unordered_map<Player*, UpdateData> UpdateDataMapType;
 
-static constexpr Milliseconds HEARTBEAT_INTERVAL = 5s + 200ms;
-
 class Object
 {
 public:
@@ -247,8 +245,6 @@ public:
     [[nodiscard]] DynamicObject const* ToDynObject() const { if (IsDynamicObject()) return reinterpret_cast<DynamicObject const*>(this); else return nullptr; }
 
     [[nodiscard]] inline bool IsItem() const { return GetTypeId() == TYPEID_ITEM; }
-
-    virtual void Heartbeat() {}
 
     virtual std::string GetDebugInfo() const;
 
@@ -845,7 +841,6 @@ protected:
     virtual bool IsAlwaysDetectableFor(WorldObject const* /*seer*/) const { return false; }
 private:
     Map* m_currMap;                                    //current object's Map location
-    Milliseconds _heartbeatTimer;
     //uint32 m_mapId;                                     // object at map with map_id
     uint32 m_InstanceId;                                // in map copy with instance id
     uint32 m_phaseMask;                                 // in area phase state
