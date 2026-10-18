@@ -23,6 +23,7 @@
 #include "EventMap.h"
 #include "TaskScheduler.h"
 #include "UnitAI.h"
+#include <atomic>
 
 class WorldObject;
 class Unit;
@@ -243,6 +244,9 @@ public:
     virtual void OnSpellClick(Unit* /*clicker*/, bool& /*result*/) { }
 
     virtual bool CanSeeAlways(WorldObject const* /*obj*/) { return false; }
+    // Live AI objects whose class overrides CanSeeAlways() or CanAlwaysBeDetectable() (only boss_renataki).
+    static inline std::atomic<int32> s_visibilityHookAIs{0};
+    static bool VisibilityHooksInUse() { return s_visibilityHookAIs.load(std::memory_order_relaxed) != 0; }
 
     virtual bool CanBeSeen(Player const* /*seer*/) { return true; }
     virtual bool CanAlwaysBeDetectable(WorldObject const* /*seer*/) { return false; }

@@ -44,7 +44,9 @@ public:
 
     struct boss_renatakiAI : public BossAI
     {
-        boss_renatakiAI(Creature* creature) : BossAI(creature, DATA_EDGE_OF_MADNESS) { }
+        boss_renatakiAI(Creature* creature) : BossAI(creature, DATA_EDGE_OF_MADNESS) { CreatureAI::s_visibilityHookAIs.fetch_add(1, std::memory_order_relaxed); }
+        ~boss_renatakiAI() override { CreatureAI::s_visibilityHookAIs.fetch_sub(1, std::memory_order_relaxed); }
+        boss_renatakiAI(boss_renatakiAI const&) = delete;   // the live count must match constructions
 
         void Reset() override
         {

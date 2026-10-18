@@ -1905,6 +1905,9 @@ bool Creature::IsInvisibleDueToDespawn() const
 
 bool Creature::CanAlwaysSee(WorldObject const* obj) const
 {
+    if (LabSwitches::On(LabSwitches::SeeHookSkip) && !CreatureAI::VisibilityHooksInUse())
+        return false;  // every live AI's CanSeeAlways returns false
+
     if (IsAIEnabled && AI()->CanSeeAlways(obj))
         return true;
 
@@ -1917,6 +1920,9 @@ bool Creature::IsAlwaysDetectableFor(WorldObject const* seer) const
     {
         return true;
     }
+
+    if (LabSwitches::On(LabSwitches::SeeHookSkip) && !CreatureAI::VisibilityHooksInUse())
+        return false;  // every live AI's CanAlwaysBeDetectable returns false
 
     if (IsAIEnabled && AI()->CanAlwaysBeDetectable(seer))
     {
