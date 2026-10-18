@@ -1936,9 +1936,10 @@ bool Creature::CanStartAttack(Unit const* who, bool force) const
         (IsImmuneToPC() && who->IsPlayer()))
         return false;
 
-    if (Unit* owner = who->GetOwner())
-        if (owner->IsPlayer() && IsImmuneToPC())
-            return false;
+    if (IsImmuneToPC())
+        if (Unit* owner = who->GetOwner())
+            if (owner->IsPlayer())
+                return false;
 
     // Do not attack non-combat pets
     if (who->IsCreature() && who->GetCreatureType() == CREATURE_TYPE_NON_COMBAT_PET)
