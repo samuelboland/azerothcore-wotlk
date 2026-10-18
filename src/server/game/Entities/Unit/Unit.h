@@ -2260,7 +2260,7 @@ private:
     [[nodiscard]] uint32 GetCombatRatingDamageReduction(CombatRating cr, float rate, float cap, uint32 damage) const;
 
     void PatchValuesUpdate(ByteBuffer& valuesUpdateBuf, BuildValuesCachePosPointers& posPointers, Player* target);
-    void InvalidateValuesUpdateCache() { _valuesUpdateCache.clear(); }
+    void InvalidateValuesUpdateCache() { if (!_valuesUpdateCache.empty()) _valuesUpdateCache.clear(); }
 
     [[nodiscard]] float processDummyAuras(float TakenTotalMod) const;
 
