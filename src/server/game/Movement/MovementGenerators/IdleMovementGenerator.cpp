@@ -21,6 +21,12 @@
 
 // StopMoving is needed to make unit stop if its last movement generator expires
 // But it should not be sent otherwise there are many redundent packets
+bool IdleMovementGenerator::Update(Unit* owner, uint32)
+{
+    owner->SetMotionIdleSkip(true);   // nothing to do, now or on later ticks while this stays on top
+    return true;
+}
+
 void IdleMovementGenerator::Initialize(Unit* owner)
 {
     Reset(owner);

@@ -683,7 +683,10 @@ void Unit::Update(uint32 p_time)
     }
 
     UpdateSplineMovement(p_time);
-    GetMotionMaster()->UpdateMotion(p_time);
+    if (!m_motionIdleSkip || !LabSwitches::On(LabSwitches::MotionIdleSkip))
+        GetMotionMaster()->UpdateMotion(p_time);
+    else if (LabSwitches::VerifyOn())
+        GetMotionMaster()->LabVerifyIdleSkip(p_time);   // runs UpdateMotion and checks it did nothing
 
     InvalidateValuesUpdateCache();
 }

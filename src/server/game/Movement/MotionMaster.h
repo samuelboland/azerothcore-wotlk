@@ -141,8 +141,11 @@ private:
     //typedef std::stack<MovementGenerator *> Impl;
     typedef MovementGenerator* _Ty;
 
+    void ClearIdleSkip();   // the stack is about to change
+
     void pop()
     {
+        ClearIdleSkip();
         if (empty())
             return;
 
@@ -168,6 +171,8 @@ public:
         }
     }
     ~MotionMaster();
+
+    void LabVerifyIdleSkip(uint32 diff);
 
     void Initialize();
     void InitDefault();
