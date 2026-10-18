@@ -319,11 +319,11 @@ set_target_properties(modules
     FOLDER
       "modules")
 
-# Generate precompiled header
-# if (USE_SCRIPTPCH)
-#   list(APPEND ALL_SCRIPT_PROJECTS modules ${DYNAMIC_SCRIPT_MODULE_PROJECTS})
-#   add_cxx_pch("${ALL_SCRIPT_PROJECTS}" ${PRIVATE_PCH_HEADER})
-# endif()
+# Generate precompiled header (cuts module build time; every file still sees the same headers)
+if (USE_SCRIPTPCH)
+  list(APPEND ALL_SCRIPT_PROJECTS modules ${DYNAMIC_SCRIPT_MODULE_PROJECTS})
+  add_cxx_pch("${ALL_SCRIPT_PROJECTS}" ${PRIVATE_PCH_HEADER})
+endif()
 
 # Remove all shared libraries in the installl directory which
 # are contained in the static library already.
