@@ -69,6 +69,16 @@ namespace Movement
         int32           point_Idx;
         int32           point_Idx_offset;
 
+        // Values that depend only on (spline, point_Idx). The spline is rebuilt only in Initialize(), which resets
+        // both indices, so a matching index means the cached values are current.
+        struct SegmentTimes { int32 idx = -1; int32 start = 0; int32 end = 0; };
+        struct SegmentLine { int32 idx = -1; Vector3 start; Vector3 delta; float orientation = 0.f; };
+        mutable SegmentTimes _segTimes;
+        mutable SegmentLine _segLine;
+        void RefreshSegmentTimes() const;
+        void RefreshSegmentLine() const;     // linear splines only
+        Location ComputePositionImpl(bool cached) const;
+
         void init_spline(MoveSplineInitArgs const& args);
 
     protected:

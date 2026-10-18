@@ -16,6 +16,7 @@
  */
 
 #include "SmartScript.h"
+#include "LabSwitches.h"
 #include "Cell.h"
 #include "CellImpl.h"
 #include "ChatTextBuilder.h"
@@ -130,6 +131,7 @@ bool SmartScript::IsSmart(bool silent) const
 
 void SmartScript::OnReset()
 {
+    StopSkippingAndSubtract();
     // xinef: check if we allow phase reset
     if (AllowPhaseReset())
         SetPhase(0);
@@ -156,6 +158,22 @@ void SmartScript::OnReset()
 
 void SmartScript::ProcessEventsFor(SMART_EVENT e, Unit* unit, uint32 var0, uint32 var1, bool bvar, SpellInfo const* spell, GameObject* gob)
 {
+    // No event of this type: the loop below would match nothing (the mask holds every type mEvents has ever had).
+    if (!HasEventType(e) && LabSwitches::On(LabSwitches::SmartSkip))
+    {
+        if (!LabSwitches::VerifyOn())
+            return;
+        bool any = false;
+        for (SmartScriptHolder const& h : mEvents)
+            if (h.GetEventType() != SMART_EVENT_LINK && SMART_EVENT(h.GetEventType()) == e)
+                any = true;
+        if (LabSwitches::Check(LabSwitches::V_SMART_TYPES, !any))
+            LOG_ERROR("server.worldserver", "LAB verify smart script event types: event type {} present but not in the mask", uint32(e));
+        if (!any)
+            return;   // on a mismatch, fall through and run the loop as before
+    }
+
+    StopSkippingAndSubtract();
     for (SmartAIEventList::iterator i = mEvents.begin(); i != mEvents.end(); ++i)
     {
         SMART_EVENT eventType = SMART_EVENT((*i).GetEventType());
@@ -184,6 +202,8 @@ void SmartScript::ProcessEventsFor(SMART_EVENT e, Unit* unit, uint32 var0, uint3
 
 void SmartScript::ProcessAction(SmartScriptHolder& e, Unit* unit, uint32 var0, uint32 var1, bool bvar, SpellInfo const* spell, GameObject* gob)
 {
+    StopSkippingAndSubtract();
+    ++mLabActionCount;
     e.runOnce = true;//used for repeat check
 
     //calc random
@@ -3456,6 +3476,7 @@ void SmartScript::ProcessTimedAction(SmartScriptHolder& e, uint32 const& min, ui
 
 void SmartScript::InstallTemplate(SmartScriptHolder const& e)
 {
+    StopSkippingAndSubtract();
     if (!GetBaseObject())
         return;
     if (mTemplate != SMARTAI_TEMPLATE_BASIC)
@@ -3530,6 +3551,7 @@ void SmartScript::InstallTemplate(SmartScriptHolder const& e)
 
 void SmartScript::AddEvent(SMART_EVENT e, uint32 event_flags, uint32 event_param1, uint32 event_param2, uint32 event_param3, uint32 event_param4, uint32 event_param5, uint32 event_param6, SMART_ACTION action, uint32 action_param1, uint32 action_param2, uint32 action_param3, uint32 action_param4, uint32 action_param5, uint32 action_param6, SMARTAI_TARGETS t, uint32 target_param1, uint32 target_param2, uint32 target_param3, uint32 target_param4, uint32 phaseMask)
 {
+    StopSkippingAndSubtract();
     mInstallEvents.push_back(CreateSmartEvent(e, event_flags, event_param1, event_param2, event_param3, event_param4, event_param5, event_param6, action, action_param1, action_param2, action_param3, action_param4, action_param5, action_param6, t, target_param1, target_param2, target_param3, target_param4, phaseMask));
 }
 
@@ -4245,6 +4267,7 @@ void SmartScript::GetWorldObjectsInDist(ObjectVector& targets, float dist) const
 
 void SmartScript::ProcessEvent(SmartScriptHolder& e, Unit* unit, uint32 var0, uint32 var1, bool bvar, SpellInfo const* spell, GameObject* gob)
 {
+    StopSkippingAndSubtract();
     if (!e.active && e.GetEventType() != SMART_EVENT_LINK)
         return;
 
@@ -5198,16 +5221,175 @@ void SmartScript::InstallEvents()
     if (!mInstallEvents.empty())
     {
         for (SmartAIEventList::iterator i = mInstallEvents.begin(); i != mInstallEvents.end(); ++i)
-            mEvents.push_back(*i);//must be before UpdateTimers
+            AppendEvent(*i);//must be before UpdateTimers
 
         mInstallEvents.clear();
     }
+}
+
+void SmartScript::AppendEvent(SmartScriptHolder const& h)
+{
+    mEvents.push_back(h);
+    uint32 const t = h.GetEventType();
+    if (t < 128)
+        mEventTypeMask[t >> 6] |= uint64(1) << (t & 63);
+    else
+        mHasAlwaysBusyEvent = true;   // outside the mask: never skip (cannot happen, SMART_EVENT_AC_END is 111)
+    if (t == SMART_EVENT_FRIENDLY_MISSING_BUFF || t == SMART_EVENT_HAS_AURA || t == SMART_EVENT_TARGET_BUFFED)
+        mHasAlwaysBusyEvent = true;   // these do real work every time their timer is due, in or out of combat
+    if (h.GetScriptType() == SMART_SCRIPT_TYPE_TIMED_ACTIONLIST)
+        mHasAlwaysBusyEvent = true;   // not expected in mEvents; UpdateTimer treats these differently, so never skip
+}
+
+// True if UpdateTimer counts this event's timer down while the unit is not engaged and the phase is `phase`.
+bool SmartScript::EventCountsDown(SmartScriptHolder const& e, uint32 phase) const
+{
+    uint32 const t = e.GetEventType();
+    if (t == SMART_EVENT_LINK || t == SMART_EVENT_UPDATE_IC)   // UPDATE_IC is skipped while not engaged (also with no me)
+        return false;
+    uint32 const mask = e.event.event_phase_mask;
+    if (mask && !(phase && ((1u << (phase - 1)) & mask)))      // the IsInPhase test, for `phase`
+        return false;
+    return true;                                               // UPDATE_OOC counts while not engaged
+}
+
+// The state skipping was planned for still holds: same phase, not engaged, not casting.
+bool SmartScript::SkipGateHolds() const
+{
+    if (mEventPhase != mSkipPhase)
+        return false;
+    return !me || (!me->IsEngaged() && !me->HasUnitState(UNIT_STATE_CASTING));
+}
+
+void SmartScript::StopSkippingAndSubtract()
+{
+    if (!mCanSkipEventLoop)
+        return;
+    mCanSkipEventLoop = false;
+    if (mEarliestTimerDue != std::numeric_limits<uint64>::max() && mTimeNotYetSubtracted)
+    {
+        uint32 const spent = uint32(mTimeNotYetSubtracted);   // <= mEarliestTimerDue <= every counting timer > 0
+        for (SmartScriptHolder& e : mEvents)
+            if (e.timer > 0 && EventCountsDown(e, mSkipPhase))
+                e.timer -= spent;
+    }
+    mTimeNotYetSubtracted = 0;
+}
+
+// Called at the end of OnUpdate: start skipping if, from now on, a tick of the event loop can only count timers down.
+void SmartScript::TryStartSkipping()
+{
+    if (mCanSkipEventLoop)
+        return;
+    if (mHasAlwaysBusyEvent || !mInstallEvents.empty() || !mStoredEvents.empty() || !mTimedActionList.empty()
+        || !mRemIDs.empty() || mEventSortingRequired || isProcessingTimedActionList)
+        return;
+    if (me && (me->IsEngaged() || me->HasUnitState(UNIT_STATE_CASTING)))
+        return;
+
+    uint64 earliest = std::numeric_limits<uint64>::max();
+    for (SmartScriptHolder const& e : mEvents)
+    {
+        if (!EventCountsDown(e, mEventPhase))
+            continue;
+        if (e.timer > 0)
+        {
+            earliest = std::min<uint64>(earliest, e.timer);
+            continue;
+        }
+        // timer == 0: UpdateTimer takes its "timer < diff" branch on every tick with diff > 0.
+        if (!e.active)
+            return;                                   // that branch would set active = true
+        switch (e.GetEventType())
+        {
+            case SMART_EVENT_HEALTH_PCT: case SMART_EVENT_TARGET_HEALTH_PCT:
+            case SMART_EVENT_MANA_PCT: case SMART_EVENT_TARGET_MANA_PCT:
+            case SMART_EVENT_RANGE: case SMART_EVENT_VICTIM_CASTING:
+            case SMART_EVENT_FRIENDLY_HEALTH: case SMART_EVENT_FRIENDLY_IS_CC:
+            case SMART_EVENT_AREA_CASTING: case SMART_EVENT_AREA_RANGE:
+                break;                                // ProcessEvent returns at once while not engaged
+            case SMART_EVENT_UPDATE: case SMART_EVENT_UPDATE_OOC:
+            case SMART_EVENT_NEAR_PLAYERS: case SMART_EVENT_NEAR_PLAYERS_NEGATION:
+            case SMART_EVENT_NEAR_UNIT: case SMART_EVENT_NEAR_UNIT_NEGATION:
+            case SMART_EVENT_IS_BEHIND_TARGET: case SMART_EVENT_FRIENDLY_HEALTH_PCT:
+            case SMART_EVENT_DISTANCE_CREATURE: case SMART_EVENT_DISTANCE_GAMEOBJECT:
+            case SMART_EVENT_IS_IN_MELEE_RANGE:
+            case SMART_EVENT_FRIENDLY_MISSING_BUFF: case SMART_EVENT_HAS_AURA: case SMART_EVENT_TARGET_BUFFED:
+                return;                               // these can do real work on every tick at timer 0
+            default:
+                break;                                // not processed by UpdateTimer
+        }
+    }
+    mEarliestTimerDue = earliest;
+    mTimeNotYetSubtracted = 0;
+    mSkipPhase = mEventPhase;
+    mCanSkipEventLoop = true;
+}
+
+SmartScript::LabSkipSnapshot SmartScript::LabTakeSnapshot() const
+{
+    LabSkipSnapshot s;
+    s.holders.reserve(mEvents.size());
+    for (SmartScriptHolder const& e : mEvents)
+        s.holders.push_back({ e.timer, e.priority, e.active, e.runOnce });
+    s.phase = mEventPhase;
+    s.priority = mCurrentPriority;
+    s.actions = mLabActionCount;
+    return s;
+}
+
+// Verification: the real loop just ran on a tick the skip would have taken. It must only have counted the
+// counting timers down by diff, and changed nothing else.
+void SmartScript::LabCheckSnapshot(LabSkipSnapshot const& before, uint32 diff)
+{
+    bool ok = before.holders.size() == mEvents.size() && before.phase == mEventPhase && before.priority == mCurrentPriority
+        && before.actions == mLabActionCount && !mEventSortingRequired && mInstallEvents.empty() && mStoredEvents.empty()
+        && mTimedActionList.empty() && mRemIDs.empty();
+    for (std::size_t i = 0; ok && i < mEvents.size(); ++i)
+    {
+        LabHolderState const& b = before.holders[i];
+        SmartScriptHolder const& e = mEvents[i];
+        uint32 const expected = (b.timer > 0 && EventCountsDown(e, before.phase)) ? b.timer - diff : b.timer;
+        ok = e.timer == expected && e.priority == b.priority && e.active == b.active && e.runOnce == b.runOnce;
+        if (!ok && LabSwitches::Check(LabSwitches::V_SMART_SKIP, false))
+            LOG_ERROR("server.worldserver", "LAB verify smart script skip: entry {} event {} type {} timer {} -> {} (expected {}) diff {}",
+                e.entryOrGuid, e.event_id, e.GetEventType(), b.timer, e.timer, expected, diff);
+        if (!ok)
+            return;
+    }
+    if (!ok)
+    {
+        if (LabSwitches::Check(LabSwitches::V_SMART_SKIP, false))
+            LOG_ERROR("server.worldserver", "LAB verify smart script skip: script state changed (events {} -> {}, phase {} -> {}, actions {} -> {})",
+                before.holders.size(), mEvents.size(), before.phase, mEventPhase, before.actions, mLabActionCount);
+        return;
+    }
+    LabSwitches::Check(LabSwitches::V_SMART_SKIP, true);
 }
 
 void SmartScript::OnUpdate(uint32 const diff)
 {
     if ((mScriptType == SMART_SCRIPT_TYPE_CREATURE || mScriptType == SMART_SCRIPT_TYPE_GAMEOBJECT) && !GetBaseObject())
         return;
+
+    bool verifySkip = false;
+    if (mCanSkipEventLoop)
+    {
+        if (LabSwitches::On(LabSwitches::SmartSkip) && SkipGateHolds() && mTimeNotYetSubtracted + diff <= mEarliestTimerDue)
+        {
+            if (!LabSwitches::VerifyOn())
+            {
+                mTimeNotYetSubtracted += diff;   // the loop would only have done timer -= diff on the counting events
+                TickTextTimer(diff);
+                return;
+            }
+            verifySkip = true;                   // verification: run the real loop below, then check it did only that
+        }
+        StopSkippingAndSubtract();
+    }
+    LabSkipSnapshot snapshot;
+    if (verifySkip)
+        snapshot = LabTakeSnapshot();
 
     InstallEvents();//before UpdateTimers
 
@@ -5256,6 +5438,15 @@ void SmartScript::OnUpdate(uint32 const diff)
         // xinef: clear list after cleaning...
         mRemIDs.clear();
     }
+    if (verifySkip)
+        LabCheckSnapshot(snapshot, diff);
+    TickTextTimer(diff);
+    if (LabSwitches::On(LabSwitches::SmartSkip))
+        TryStartSkipping();
+}
+
+void SmartScript::TickTextTimer(uint32 diff)
+{
     if (mUseTextTimer && me)
     {
         if (mTextTimer < diff)
@@ -5301,6 +5492,7 @@ void SmartScript::RetryLater(SmartScriptHolder& e, bool ignoreChanceRoll)
 
 void SmartScript::FillScript(SmartAIEventList e, WorldObject* obj, AreaTrigger const* at)
 {
+    StopSkippingAndSubtract();
     (void)at; // ensure that the variable is referenced even if extra logs are disabled in order to pass compiler checks
 
     if (e.empty())
@@ -5325,12 +5517,12 @@ void SmartScript::FillScript(SmartAIEventList e, WorldObject* obj, AreaTrigger c
             {
                 if ((1 << (obj->GetMap()->GetSpawnMode() + 1)) & (*i).event.event_flags)
                 {
-                    mEvents.push_back((*i));
+                    AppendEvent((*i));
                 }
             }
             continue;
         }
-        mEvents.push_back((*i));//NOTE: 'world(0)' events still get processed in ANY instance mode
+        AppendEvent((*i));//NOTE: 'world(0)' events still get processed in ANY instance mode
     }
 }
 
@@ -5378,6 +5570,7 @@ void SmartScript::GetScript()
 
 void SmartScript::OnInitialize(WorldObject* obj, AreaTrigger const* at)
 {
+    StopSkippingAndSubtract();
     if (obj)//handle object based scripts
     {
         switch (obj->GetTypeId())
@@ -5533,6 +5726,7 @@ Unit* SmartScript::DoFindClosestFriendlyInRange(float range, bool playerOnly) co
 
 void SmartScript::SetScript9(SmartScriptHolder& e, uint32 entry)
 {
+    StopSkippingAndSubtract();
     //do NOT clear mTimedActionList if it's being iterated because it will invalidate the iterator and delete
     // any SmartScriptHolder contained like the "e" parameter passed to this function
     if (isProcessingTimedActionList)

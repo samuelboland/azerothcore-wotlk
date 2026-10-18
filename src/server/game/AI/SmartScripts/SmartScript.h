@@ -24,6 +24,8 @@
 #include "Spell.h"
 #include "Unit.h"
 #include <deque>
+#include <limits>
+#include <vector>
 
 class SmartScript
 {
@@ -284,6 +286,29 @@ private:
     GuidUnorderedSet _summonList;
 
     std::deque<SmartScriptFrame> executionStack;
+
+    // ---- skipping the event loop (see OnUpdate) ----
+    // While no event can act, an update tick only counts timers down. Then OnUpdate adds the tick time to
+    // mTimeNotYetSubtracted instead of looping; the sum is subtracted from the timers before anything else reads
+    // or changes them (StopSkippingAndSubtract, called first by every entry point that can).
+    bool   mCanSkipEventLoop = false;
+    uint64 mTimeNotYetSubtracted = 0;
+    uint64 mEarliestTimerDue = std::numeric_limits<uint64>::max();   // smallest timer > 0 among counting events
+    uint32 mSkipPhase = 0;                                           // mEventPhase when skipping started
+    uint64 mEventTypeMask[2] = { 0, 0 };                             // bit t set if mEvents has an event of type t
+    bool   mHasAlwaysBusyEvent = false;                              // an event type that can act on any tick
+    uint32 mLabActionCount = 0;                                      // ProcessAction calls (verification only)
+    void   AppendEvent(SmartScriptHolder const& h);
+    bool   HasEventType(uint32 t) const { return t < 128 && ((mEventTypeMask[t >> 6] >> (t & 63)) & 1); }
+    bool   EventCountsDown(SmartScriptHolder const& e, uint32 phase) const;
+    bool   SkipGateHolds() const;
+    void   StopSkippingAndSubtract();
+    void   TryStartSkipping();
+    void   TickTextTimer(uint32 diff);
+    struct LabHolderState { uint32 timer; uint32 priority; bool active; bool runOnce; };
+    struct LabSkipSnapshot { std::vector<LabHolderState> holders; uint32 phase = 0; uint32 priority = 0; uint32 actions = 0; };
+    LabSkipSnapshot LabTakeSnapshot() const;
+    void   LabCheckSnapshot(LabSkipSnapshot const& before, uint32 diff);
 };
 
 #endif

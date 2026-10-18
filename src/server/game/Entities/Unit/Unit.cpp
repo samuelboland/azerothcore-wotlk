@@ -659,9 +659,34 @@ void Unit::Update(uint32 p_time)
         // Aura effects triggered by the calls above may change health; then recompute next tick, as before.
         m_auraStateValid = GetHealth() == auraStateHealth && GetMaxHealth() == auraStateMaxHealth && m_deathState == auraStateDeathState;
     }
+    else if (LabSwitches::VerifyOn())
+    {
+        // Verification: ModifyAuraState(flag, apply) does nothing exactly when the flag already equals apply.
+        bool const alive = IsAlive();
+        bool const want20 = alive ? HealthBelowPct(20) : false;
+        bool const want35 = alive ? HealthBelowPct(35) : false;
+        bool const want75 = alive ? HealthAbovePct(75) : false;
+        auto has = [this](AuraStateType flag) { return HasFlag(UNIT_FIELD_AURASTATE, 1 << (flag - 1)); };   // ModifyAuraState's own test
+        bool const ok = has(AURA_STATE_HEALTHLESS_20_PERCENT) == want20 && has(AURA_STATE_HEALTHLESS_35_PERCENT) == want35
+            && has(AURA_STATE_HEALTH_ABOVE_75_PERCENT) == want75;
+        if (LabSwitches::Check(LabSwitches::V_AURA_STATE, ok))
+            LOG_ERROR("server.worldserver", "LAB verify health aura states: unit {} health {}/{} want {} {} {}", GetGUID().ToString(),
+                GetHealth(), GetMaxHealth(), want20, want35, want75);
+        if (!ok)
+        {
+            // on a mismatch, behave as before
+            ModifyAuraState(AURA_STATE_HEALTHLESS_20_PERCENT, want20);
+            ModifyAuraState(AURA_STATE_HEALTHLESS_35_PERCENT, want35);
+            ModifyAuraState(AURA_STATE_HEALTH_ABOVE_75_PERCENT, want75);
+            m_auraStateValid = false;
+        }
+    }
 
     UpdateSplineMovement(p_time);
-    GetMotionMaster()->UpdateMotion(p_time);
+    if (!m_motionIdleSkip || !LabSwitches::On(LabSwitches::MotionIdleSkip))
+        GetMotionMaster()->UpdateMotion(p_time);
+    else if (LabSwitches::VerifyOn())
+        GetMotionMaster()->LabVerifyIdleSkip(p_time);   // runs UpdateMotion and checks it did nothing
 
     InvalidateValuesUpdateCache();
 }

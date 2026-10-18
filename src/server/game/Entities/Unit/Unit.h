@@ -1792,6 +1792,7 @@ public:
     // DeathState
     DeathState getDeathState() { return m_deathState; };
     void SetSplineMaybeActive() { m_splineMaybeActive = true; }
+    void SetMotionIdleSkip(bool skip) { m_motionIdleSkip = skip; }
     void PrefetchForUpdate(int stage) const override
     {
         if (stage == 0)
@@ -2139,6 +2140,9 @@ public:
     // One-sided mirror of !movespline->Finalized(): set wherever a spline is initialized (MoveSplineInit),
     // cleared once UpdateSplineMovement sees the spline finalized. False means finalized, exactly.
     bool m_splineMaybeActive = false;
+    // Set by IdleMovementGenerator::Update (whose body is "return true"); cleared by MotionMaster wherever the
+    // movement stack changes. While set, UpdateMotion would do nothing, so Unit::Update skips it.
+    bool m_motionIdleSkip = false;
     // Health aura-state cache: inputs and resulting bits of the last full update. While all of them are
     // unchanged, the three ModifyAuraState calls in Unit::Update would be no-ops.
     bool m_auraStateValid = false;
@@ -2260,7 +2264,7 @@ private:
     [[nodiscard]] uint32 GetCombatRatingDamageReduction(CombatRating cr, float rate, float cap, uint32 damage) const;
 
     void PatchValuesUpdate(ByteBuffer& valuesUpdateBuf, BuildValuesCachePosPointers& posPointers, Player* target);
-    void InvalidateValuesUpdateCache() { _valuesUpdateCache.clear(); }
+    void InvalidateValuesUpdateCache() { if (!_valuesUpdateCache.empty()) _valuesUpdateCache.clear(); }
 
     [[nodiscard]] float processDummyAuras(float TakenTotalMod) const;
 

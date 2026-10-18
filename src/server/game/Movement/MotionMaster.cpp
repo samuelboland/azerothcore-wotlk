@@ -25,7 +25,9 @@
 #include "GameTime.h"
 #include "HomeMovementGenerator.h"
 #include "IdleMovementGenerator.h"
+#include "LabSwitches.h"
 #include "Log.h"
+#include <typeinfo>
 #include "MoveSpline.h"
 #include "MoveSplineInit.h"
 #include "Player.h"
@@ -164,6 +166,26 @@ void MotionMaster::DirectClean(bool reset)
         top()->Reset(_owner);
 }
 
+void MotionMaster::ClearIdleSkip()
+{
+    _owner->SetMotionIdleSkip(false);
+}
+
+// Verification: Unit::Update would have skipped this call. Check that UpdateMotion is then a no-op: the idle
+// generator is on top, nothing waits for deletion, and the clean flags come back unchanged.
+void MotionMaster::LabVerifyIdleSkip(uint32 diff)
+{
+    bool const before = !empty() && top() && typeid(*top()) == typeid(IdleMovementGenerator) && !_expList
+        && !(_cleanFlag & (MMCF_INUSE | MMCF_UPDATE));
+    uint8 const flags = _cleanFlag;
+    int const topBefore = _top;
+    UpdateMotion(diff);
+    bool const ok = before && _cleanFlag == flags && _top == topBefore;
+    if (LabSwitches::Check(LabSwitches::V_MOTION_IDLE, ok))
+        LOG_ERROR("server.worldserver", "LAB verify motion idle skip: unit {} top {} type {} flags {} -> {}", _owner->GetGUID().ToString(),
+            topBefore, (!empty() && top()) ? int32(top()->GetMovementGeneratorType()) : -1, flags, _cleanFlag);
+}
+
 void MotionMaster::DelayedClean()
 {
     while (size() > 1)
@@ -176,6 +198,7 @@ void MotionMaster::DelayedClean()
 
 void MotionMaster::DirectExpire(bool reset)
 {
+    ClearIdleSkip();
     if (size() > 1)
     {
         MovementGenerator* curr = top();
@@ -196,6 +219,7 @@ void MotionMaster::DirectExpire(bool reset)
 
 void MotionMaster::DelayedExpire()
 {
+    ClearIdleSkip();
     if (size() > 1)
     {
         MovementGenerator* curr = top();
@@ -209,6 +233,7 @@ void MotionMaster::DelayedExpire()
 
 void MotionMaster::DirectExpireSlot(MovementSlot slot, bool reset)
 {
+    ClearIdleSkip();
     if (size() > 1)
     {
         MovementGenerator* curr = Impl[slot];
@@ -899,6 +924,7 @@ void MotionMaster::MoveDistract(uint32 timer)
 
 void MotionMaster::Mutate(MovementGenerator* m, MovementSlot slot)
 {
+    ClearIdleSkip();
     bool const delayed = (_cleanFlag & MMCF_UPDATE);
 
     while (MovementGenerator* curr = Impl[slot])

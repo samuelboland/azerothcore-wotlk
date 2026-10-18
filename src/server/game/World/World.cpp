@@ -302,6 +302,10 @@ void World::LoadConfigSettings(bool reload)
         LabSwitches::On(LabSwitches::SplineFlag), LabSwitches::On(LabSwitches::AuraStateCache), LabSwitches::On(LabSwitches::AuraShortcut),
         LabSwitches::On(LabSwitches::Prefetch), LabSwitches::On(LabSwitches::ThreatCheck), LabSwitches::On(LabSwitches::ScriptIdSkip),
         LabSwitches::On(LabSwitches::OwnerLookup));
+    LOG_INFO("server.loading", "LAB switches: GoAiSkip {} SeeHookSkip {} SplineSegCache {} SmartSkip {} MotionIdleSkip {} Verify {}",
+        LabSwitches::On(LabSwitches::GoAiSkip), LabSwitches::On(LabSwitches::SeeHookSkip), LabSwitches::On(LabSwitches::SplineSegCache),
+        LabSwitches::On(LabSwitches::SmartSkip), LabSwitches::On(LabSwitches::MotionIdleSkip),
+        LabSwitches::VerifyOn());
 
     // call ScriptMgr if we're reloading the configuration
     sScriptMgr->OnAfterConfigLoad(reload);
@@ -1135,6 +1139,17 @@ void World::Update(uint32 diff)
 
     // Record update if recording set in log and diff is greater then minimum set in log
     sWorldUpdateTime.RecordUpdateTime(GameTime::GetGameTimeMS(), diff, sWorldSessionMgr->GetActiveSessionCount());
+
+    // Verification totals (Lab.Verify = 1), every 30 s.
+    static uint32 labVerifyTimer = 0;
+    if (LabSwitches::VerifyOn() && (labVerifyTimer += diff) >= 30000)
+    {
+        labVerifyTimer = 0;
+        uint64_t checks[LabSwitches::V_COUNT], bad[LabSwitches::V_COUNT];
+        LabSwitches::VerifyTotals(checks, bad);
+        for (int v = 0; v < LabSwitches::V_COUNT; ++v)
+            LOG_INFO("server.worldserver", "LAB verify {}: checks {} mismatches {}", LabSwitches::VerifyName(v), checks[v], bad[v]);
+    }
 
     DynamicVisibilityMgr::Update(sWorldSessionMgr->GetActiveSessionCount());
 

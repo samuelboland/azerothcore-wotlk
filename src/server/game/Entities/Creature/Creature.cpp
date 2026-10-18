@@ -1907,6 +1907,9 @@ bool Creature::IsInvisibleDueToDespawn() const
 
 bool Creature::CanAlwaysSee(WorldObject const* obj) const
 {
+    if (LabSwitches::On(LabSwitches::SeeHookSkip) && !CreatureAI::VisibilityHooksInUse())
+        return false;  // every live AI's CanSeeAlways returns false
+
     if (IsAIEnabled && AI()->CanSeeAlways(obj))
         return true;
 
@@ -1919,6 +1922,9 @@ bool Creature::IsAlwaysDetectableFor(WorldObject const* seer) const
     {
         return true;
     }
+
+    if (LabSwitches::On(LabSwitches::SeeHookSkip) && !CreatureAI::VisibilityHooksInUse())
+        return false;  // every live AI's CanAlwaysBeDetectable returns false
 
     if (IsAIEnabled && AI()->CanAlwaysBeDetectable(seer))
     {
@@ -1938,9 +1944,10 @@ bool Creature::CanStartAttack(Unit const* who, bool force) const
         (IsImmuneToPC() && who->IsPlayer()))
         return false;
 
-    if (Unit* owner = who->GetOwner())
-        if (owner->IsPlayer() && IsImmuneToPC())
-            return false;
+    if (IsImmuneToPC())
+        if (Unit* owner = who->GetOwner())
+            if (owner->IsPlayer())
+                return false;
 
     // Do not attack non-combat pets
     if (who->IsCreature() && who->GetCreatureType() == CREATURE_TYPE_NON_COMBAT_PET)

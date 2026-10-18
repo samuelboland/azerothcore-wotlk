@@ -17,23 +17,83 @@
 
 #include "MoveSpline.h"
 #include "Creature.h"
+#include "LabSwitches.h"
 #include "Log.h"
+#include <cstring>
 #include <sstream>
 
 namespace Movement
 {
 
+    void MoveSpline::RefreshSegmentTimes() const
+    {
+        if (_segTimes.idx != point_Idx)
+            _segTimes = SegmentTimes{ point_Idx, spline.length(point_Idx), spline.length(point_Idx + 1) };
+    }
+
+    void MoveSpline::RefreshSegmentLine() const
+    {
+        if (_segLine.idx == point_Idx)
+            return;
+
+        ASSERT(point_Idx >= spline.first() && point_Idx < spline.last());   // the check EvaluateLinear makes
+        Vector3 const& p0 = spline.getPoint(point_Idx);
+        Vector3 const& p1 = spline.getPoint(point_Idx + 1);
+        _segLine.idx = point_Idx;
+        _segLine.start = p0;
+        _segLine.delta = p1 - p0;   // the same operation as EvaluateLinear and EvaluateDerivativeLinear
+        _segLine.orientation = std::atan2(_segLine.delta.y, _segLine.delta.x);
+    }
+
     Location MoveSpline::ComputePosition() const
+    {
+        if (!LabSwitches::On(LabSwitches::SplineSegCache))
+            return ComputePositionImpl(false);
+
+        Location const c = ComputePositionImpl(true);
+        if (LabSwitches::VerifyOn())
+        {
+            Location const o = ComputePositionImpl(false);
+            bool const same = std::memcmp(&c, &o, sizeof(Location)) == 0;
+            if (LabSwitches::Check(LabSwitches::V_SPLINE_POS, same))
+                LOG_ERROR("server.worldserver", "LAB verify spline position: idx {} time {} mode {} cached {} {} {} {} original {} {} {} {}",
+                    point_Idx, time_passed, int32(spline.mode()), c.x, c.y, c.z, c.orientation, o.x, o.y, o.z, o.orientation);
+            if (!same)
+                return o;   // on a mismatch, behave as before
+        }
+        return c;
+    }
+
+    Location MoveSpline::ComputePositionImpl(bool cached) const
     {
         ASSERT(Initialized());
 
+        bool const linear = cached && spline.mode() == SplineBase::ModeLinear;
         float u = 1.f;
-        int32 seg_time = spline.length(point_Idx, point_Idx + 1);
-        if (seg_time > 0)
-            u = (time_passed - spline.length(point_Idx)) / (float)seg_time;
+        if (cached)
+        {
+            RefreshSegmentTimes();
+            int32 const seg_time = _segTimes.end - _segTimes.start;
+            if (seg_time > 0)
+                u = (time_passed - _segTimes.start) / (float)seg_time;
+        }
+        else
+        {
+            int32 seg_time = spline.length(point_Idx, point_Idx + 1);
+            if (seg_time > 0)
+                u = (time_passed - spline.length(point_Idx)) / (float)seg_time;
+        }
         Location c;
         c.orientation = initialOrientation;
-        spline.evaluate_percent(point_Idx, u, c);
+        if (linear)
+        {
+            RefreshSegmentLine();
+            c.x = _segLine.start.x + _segLine.delta.x * u;
+            c.y = _segLine.start.y + _segLine.delta.y * u;
+            c.z = _segLine.start.z + _segLine.delta.z * u;
+        }
+        else
+            spline.evaluate_percent(point_Idx, u, c);
 
         if (splineflags.animation)
             ;// MoveSplineFlag::Animation disables falling or parabolic movement
@@ -54,9 +114,14 @@ namespace Movement
         {
             if (!splineflags.hasFlag(MoveSplineFlag::OrientationFixed | MoveSplineFlag::Falling))
             {
-                Vector3 hermite;
-                spline.evaluate_derivative(point_Idx, u, hermite);
-                c.orientation = std::atan2(hermite.y, hermite.x);
+                if (linear)
+                    c.orientation = _segLine.orientation;
+                else
+                {
+                    Vector3 hermite;
+                    spline.evaluate_derivative(point_Idx, u, hermite);
+                    c.orientation = std::atan2(hermite.y, hermite.x);
+                }
             }
 
             if (splineflags.orientationInversed)
@@ -157,6 +222,8 @@ namespace Movement
 
     void MoveSpline::Initialize(MoveSplineInitArgs const& args)
     {
+        _segTimes.idx = -1;   // the spline is about to change
+        _segLine.idx = -1;
         splineflags = args.flags;
         facing = args.facing;
         m_Id = args.splineId;
@@ -252,7 +319,22 @@ namespace Movement
 
         UpdateResult result = Result_None;
 
-        int32 minimal_diff = std::min(ms_time_diff, segment_time_elapsed());
+        int32 segEnd;
+        if (LabSwitches::On(LabSwitches::SplineSegCache))
+        {
+            RefreshSegmentTimes();
+            segEnd = _segTimes.end;
+            if (LabSwitches::VerifyOn())
+            {
+                if (LabSwitches::Check(LabSwitches::V_SPLINE_TIME, segEnd == next_timestamp()))
+                    LOG_ERROR("server.worldserver", "LAB verify spline segment end: idx {} cached {} original {}", point_Idx, segEnd, next_timestamp());
+                segEnd = next_timestamp();   // the original value either way
+            }
+        }
+        else
+            segEnd = next_timestamp();
+
+        int32 minimal_diff = std::min(ms_time_diff, segEnd - time_passed);   // was segment_time_elapsed()
         if (minimal_diff < 0)
             minimal_diff = 0;
 
@@ -260,7 +342,7 @@ namespace Movement
         time_passed += minimal_diff;
         ms_time_diff -= minimal_diff;
 
-        if (time_passed >= next_timestamp())
+        if (time_passed >= segEnd)   // was next_timestamp(); point_Idx has not changed since segEnd was read
         {
             ++point_Idx;
             if (point_Idx < spline.last())

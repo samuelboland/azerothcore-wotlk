@@ -1065,7 +1065,7 @@ void MovementInfo::OutDebug()
 WorldObject::WorldObject() : WorldLocation(),
     LastUsedScriptID(0), m_name(""), m_isActive(false), _visibilityDistanceOverrideType(VisibilityDistanceType::Normal), m_zoneScript(nullptr),
     _zoneId(0), _areaId(0), _floorZ(INVALID_HEIGHT), _outdoors(false), _liquidData(), _updatePositionData(false), m_transport(nullptr),
-    m_currMap(nullptr), _heartbeatTimer(HEARTBEAT_INTERVAL), m_InstanceId(0), m_phaseMask(PHASEMASK_NORMAL), m_useCombinedPhases(true),
+    m_currMap(nullptr), m_InstanceId(0), m_phaseMask(PHASEMASK_NORMAL), m_useCombinedPhases(true),
     m_notifyflags(0), m_executed_notifies(0), _objectVisibilityContainer(this)
 {
     m_serverSideVisibility.SetValue(SERVERSIDE_VISIBILITY_GHOST, GHOST_VISIBILITY_ALIVE | GHOST_VISIBILITY_GHOST);
@@ -1077,13 +1077,6 @@ WorldObject::WorldObject() : WorldLocation(),
 void WorldObject::Update(uint32 diff)
 {
     m_Events.Update(diff);
-
-    _heartbeatTimer -= Milliseconds(diff);
-    while (_heartbeatTimer <= 0ms)
-    {
-        _heartbeatTimer += HEARTBEAT_INTERVAL;
-        Heartbeat();
-    }
 
     sScriptMgr->OnWorldObjectUpdate(this, diff);
 }

@@ -26,7 +26,7 @@ public:
     void Initialize(Unit*) override;
     void Finalize(Unit*) override {  }
     void Reset(Unit*) override;
-    bool Update(Unit*, uint32) override { return true; }
+    bool Update(Unit* owner, uint32) override;
     MovementGeneratorType GetMovementGeneratorType() override { return IDLE_MOTION_TYPE; }
 };
 
